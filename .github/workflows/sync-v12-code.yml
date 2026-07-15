@@ -1,0 +1,53 @@
+name: Sync v12-code cask
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-v12-code-cask
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read latest stable V12 release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh api repos/12ya/t3code/releases/latest > "$RUNNER_TEMP/release.json"; then
+            echo "No stable V12 release exists yet; nothing to sync."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate cask
+        if: steps.release.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ruby scripts/sync-v12-code-cask.rb "$RUNNER_TEMP/release.json"
+
+      - name: Commit cask update
+        if: steps.release.outputs.available == 'true'
+        run: |
+          if git diff --quiet -- Casks/v12-code.rb; then
+            echo "Cask is already current."
+            exit 0
+          fi
+
+          version="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV.fetch(0))).fetch("tag_name").delete_prefix("v")' "$RUNNER_TEMP/release.json")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/v12-code.rb
+          git commit -m "v12-code ${version}"
+          git push
+
