@@ -25,6 +25,11 @@ checksums = arches.to_h do |homebrew_arch, artifact_arch|
   asset = assets[artifact_name]
   abort "Release #{tag} is missing #{artifact_name}." unless asset
 
+  published_digest = asset["digest"]
+  if published_digest&.match?(/\Asha256:[0-9a-f]{64}\z/)
+    next [homebrew_arch, published_digest.delete_prefix("sha256:")]
+  end
+
   Tempfile.create(["v12-code-#{artifact_arch}", ".dmg"]) do |file|
     headers = { "User-Agent" => "12ya-homebrew-tap" }
     token = ENV["GH_TOKEN"]
@@ -71,4 +76,3 @@ path = File.expand_path("../Casks/v12-code.rb", __dir__)
 FileUtils.mkdir_p(File.dirname(path))
 File.write(path, cask) unless File.exist?(path) && File.read(path) == cask
 puts "Prepared v12-code #{version}."
-
